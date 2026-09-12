@@ -4,6 +4,8 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Appointment Confirmed | Advanced Skin Clinic</title>
+    <link rel="icon" type="image/png" href="favicon.png">
+    <link rel="apple-touch-icon" href="apple-touch-icon.png">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Quando&family=Open+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
@@ -360,14 +362,9 @@
         }
 
         if (time) {
-            const [hh, mm] = time.split(':');
-            const timeDate = new Date();
-            timeDate.setHours(Number(hh), Number(mm), 0);
-            document.getElementById('detailTime').textContent = timeDate.toLocaleTimeString('en-US', {
-                hour: 'numeric',
-                minute: '2-digit',
-                hour12: true
-            });
+            // appointment.html already sends this pre-formatted as 12-hour
+            // (e.g. "10:30 AM"), so just display it as-is.
+            document.getElementById('detailTime').textContent = time;
         }
 
         // If someone lands here directly with no details, hide the details box gracefully
