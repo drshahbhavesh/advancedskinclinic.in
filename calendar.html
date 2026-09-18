@@ -4,6 +4,8 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Availability Calendar - Admin Dashboard</title>
+    <link rel="icon" type="image/png" href="favicon.png">
+    <link rel="apple-touch-icon" href="apple-touch-icon.png">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Quando&family=Open+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
@@ -153,6 +155,9 @@
         }
         .nav-links .appointment-btn:hover {
             background-color: #5aa9a4;
+        }
+        .role-reception #analyticsNavBtnCal {
+            display: none;
         }
 
         /* ---------- Page layout ---------- */
@@ -447,8 +452,8 @@
 
     <div id="loginScreen">
         <div class="login-box">
-            <h1>Doctor Login</h1>
-            <div class="login-subtext">The availability calendar is only available to the doctor account.</div>
+            <h1>Staff Login</h1>
+            <div class="login-subtext">Log in with your reception or doctor account to manage availability.</div>
             <div class="login-field">
                 <label for="loginUsername">Username</label>
                 <input type="text" id="loginUsername" autocomplete="username">
@@ -467,7 +472,7 @@
             <div class="logo">Admin Dashboard</div>
             <div class="nav-links">
                 <a href="admin.html">Appointments</a>
-                <a href="analytics.html">Analytics</a>
+                <a href="analytics.html" id="analyticsNavBtnCal">Analytics</a>
                 <a href="index.html">Site</a>
                 <a href="appointment.html" class="appointment-btn">View Bookings Page</a>
                 <a href="#" id="logoutLink">Log Out</a>
@@ -585,8 +590,11 @@
             evening_end: "19:30"
         };
 
-        // ---------- Doctor-only login (mirrors admin.html / analytics.html) ----------
-        const DOCTOR_CREDENTIALS = { username: 'Bhavesh', password: 'Bha@123' };
+        // ---------- Staff login (mirrors admin.html's credential gate) ----------
+        const CREDENTIALS = {
+            reception: { username: 'reception', password: 'reception123' },
+            doctor:    { username: 'Bhavesh',    password: 'Bha@123' }
+        };
 
         const loginScreen = document.getElementById('loginScreen');
         const calendarContainer = document.getElementById('calendarContainer');
@@ -599,18 +607,26 @@
         function attemptLogin() {
             const u = loginUsername.value.trim();
             const p = loginPassword.value;
-            if (u === DOCTOR_CREDENTIALS.username && p === DOCTOR_CREDENTIALS.password) {
-                sessionStorage.setItem('userRole', 'doctor');
-                enterCalendar();
+            let matchedRole = null;
+            for (const role in CREDENTIALS) {
+                if (u === CREDENTIALS[role].username && p === CREDENTIALS[role].password) {
+                    matchedRole = role;
+                    break;
+                }
+            }
+            if (matchedRole) {
+                sessionStorage.setItem('userRole', matchedRole);
+                enterCalendar(matchedRole);
             } else {
                 loginError.textContent = "Incorrect username or password.";
                 loginPassword.value = "";
             }
         }
 
-        function enterCalendar() {
+        function enterCalendar(role) {
             loginScreen.style.display = "none";
             calendarContainer.style.display = "block";
+            document.body.classList.toggle('role-reception', role === 'reception');
             initCalendar();
         }
 
@@ -621,6 +637,7 @@
         logoutLink.addEventListener('click', (e) => {
             e.preventDefault();
             sessionStorage.removeItem('userRole');
+            document.body.classList.remove('role-reception');
             calendarContainer.style.display = "none";
             loginScreen.style.display = "flex";
             loginUsername.value = "";
@@ -875,9 +892,10 @@
             });
         }
 
-        // Reuse an existing doctor session from admin.html/analytics.html if present.
-        if (sessionStorage.getItem('userRole') === 'doctor') {
-            enterCalendar();
+        // Reuse an existing staff session from admin.html/analytics.html if present.
+        const existingRole = sessionStorage.getItem('userRole');
+        if (existingRole && CREDENTIALS[existingRole]) {
+            enterCalendar(existingRole);
         }
     </script>
 </body>
