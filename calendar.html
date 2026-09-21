@@ -178,6 +178,27 @@
             color: #7a7a7a;
             margin-bottom: 20px;
         }
+        .default-hours-section {
+            background: #fff;
+            border-radius: 6px;
+            box-shadow: -8px 8px 30px 4px rgba(143,158,170,0.12);
+            padding: 24px 26px;
+            margin-bottom: 24px;
+        }
+        .default-hours-section h3 {
+            font-family: "Quando", serif;
+            font-weight: 400;
+            font-size: 1.2rem;
+            color: #49444c;
+            margin-bottom: 6px;
+        }
+        .default-hours-subtext {
+            font-size: 13px;
+            color: #7a7a7a;
+            margin-bottom: 18px;
+            max-width: 640px;
+        }
+
         .legend {
             display: flex;
             gap: 22px;
@@ -483,6 +504,54 @@
             <div class="page-title">Availability Calendar</div>
             <div class="page-subtitle">Block off days the clinic is closed, or adjust shift timings for individual dates. Changes apply immediately to the public booking page.</div>
 
+            <div class="default-hours-section" id="defaultHoursSection">
+                <h3>Default Booking Hours</h3>
+                <div class="default-hours-subtext">These are the standard clinic hours shown on the public booking page for every day, unless a specific date below has its own override.</div>
+
+                <div class="shift-block">
+                    <div class="shift-block-header">
+                        <span>Morning Shift</span>
+                        <label class="closed-toggle">
+                            <input type="checkbox" id="defaultMorningClosedToggle"> No morning shift
+                        </label>
+                    </div>
+                    <div class="shift-times">
+                        <div>
+                            <label for="defaultMorningStart">Start</label>
+                            <input type="time" id="defaultMorningStart">
+                        </div>
+                        <div>
+                            <label for="defaultMorningEnd">End</label>
+                            <input type="time" id="defaultMorningEnd">
+                        </div>
+                    </div>
+                </div>
+
+                <div class="shift-block">
+                    <div class="shift-block-header">
+                        <span>Evening Shift</span>
+                        <label class="closed-toggle">
+                            <input type="checkbox" id="defaultEveningClosedToggle"> No evening shift
+                        </label>
+                    </div>
+                    <div class="shift-times">
+                        <div>
+                            <label for="defaultEveningStart">Start</label>
+                            <input type="time" id="defaultEveningStart">
+                        </div>
+                        <div>
+                            <label for="defaultEveningEnd">End</label>
+                            <input type="time" id="defaultEveningEnd">
+                        </div>
+                    </div>
+                </div>
+
+                <div class="edit-actions">
+                    <button class="btn btn-save" id="saveDefaultHoursBtn">Save Default Hours</button>
+                </div>
+                <div class="save-status" id="defaultHoursSaveStatus"></div>
+            </div>
+
             <div class="legend">
                 <div class="legend-item"><span class="legend-dot dot-unavailable"></span> Closed to bookings</div>
                 <div class="legend-item"><span class="legend-dot dot-custom"></span> Custom hours</div>
@@ -582,13 +651,19 @@
         const app = initializeApp(firebaseConfig);
         const db = getFirestore(app);
 
-        // Defaults mirrored from appointment.html's generateTimeSlots()
-        const DEFAULT_HOURS = {
+        // Fallback used only until the "settings/hours" doc has been loaded
+        // (or if it has never been saved yet).
+        const FALLBACK_HOURS = {
             morning_start: "10:00",
             morning_end: "13:30",
             evening_start: "16:30",
             evening_end: "19:30"
         };
+
+        // The clinic-wide default hours shown on the public booking page for
+        // any day without its own per-day override. Editable below and
+        // persisted to Firestore at settings/hours.
+        let defaultHours = { ...FALLBACK_HOURS };
 
         // ---------- Staff login (mirrors admin.html's credential gate) ----------
         const CREDENTIALS = {
@@ -680,6 +755,15 @@
         const saveStatus = document.getElementById('saveStatus');
         const overridesList = document.getElementById('overridesList');
 
+        const defaultMorningStart = document.getElementById('defaultMorningStart');
+        const defaultMorningEnd = document.getElementById('defaultMorningEnd');
+        const defaultEveningStart = document.getElementById('defaultEveningStart');
+        const defaultEveningEnd = document.getElementById('defaultEveningEnd');
+        const defaultMorningClosedToggle = document.getElementById('defaultMorningClosedToggle');
+        const defaultEveningClosedToggle = document.getElementById('defaultEveningClosedToggle');
+        const saveDefaultHoursBtn = document.getElementById('saveDefaultHoursBtn');
+        const defaultHoursSaveStatus = document.getElementById('defaultHoursSaveStatus');
+
         async function loadAllAvailability() {
             availabilityCache = {};
             const snap = await getDocs(collection(db, "availability"));
@@ -687,6 +771,76 @@
                 availabilityCache[docSnap.id] = docSnap.data();
             });
         }
+
+        async function loadDefaultHours() {
+            try {
+                const snap = await getDoc(doc(db, "settings", "hours"));
+                if (snap.exists()) {
+                    defaultHours = { ...FALLBACK_HOURS, ...snap.data() };
+                }
+            } catch (err) {
+                console.error("Could not load default hours, falling back to built-in defaults:", err);
+            }
+        }
+
+        function renderDefaultHoursForm() {
+            const morningClosed = (defaultHours.morning_start === "" && defaultHours.morning_end === "");
+            const eveningClosed = (defaultHours.evening_start === "" && defaultHours.evening_end === "");
+
+            defaultMorningClosedToggle.checked = morningClosed;
+            defaultEveningClosedToggle.checked = eveningClosed;
+
+            defaultMorningStart.value = defaultHours.morning_start || FALLBACK_HOURS.morning_start;
+            defaultMorningEnd.value = defaultHours.morning_end || FALLBACK_HOURS.morning_end;
+            defaultEveningStart.value = defaultHours.evening_start || FALLBACK_HOURS.evening_start;
+            defaultEveningEnd.value = defaultHours.evening_end || FALLBACK_HOURS.evening_end;
+
+            defaultMorningStart.disabled = morningClosed;
+            defaultMorningEnd.disabled = morningClosed;
+            defaultEveningStart.disabled = eveningClosed;
+            defaultEveningEnd.disabled = eveningClosed;
+        }
+
+        defaultMorningClosedToggle.addEventListener('change', () => {
+            defaultMorningStart.disabled = defaultMorningClosedToggle.checked;
+            defaultMorningEnd.disabled = defaultMorningClosedToggle.checked;
+        });
+        defaultEveningClosedToggle.addEventListener('change', () => {
+            defaultEveningStart.disabled = defaultEveningClosedToggle.checked;
+            defaultEveningEnd.disabled = defaultEveningClosedToggle.checked;
+        });
+
+        saveDefaultHoursBtn.addEventListener('click', async () => {
+            saveDefaultHoursBtn.disabled = true;
+            defaultHoursSaveStatus.className = "save-status";
+            defaultHoursSaveStatus.textContent = "Saving…";
+
+            const payload = {
+                morning_start: defaultMorningClosedToggle.checked ? "" : defaultMorningStart.value,
+                morning_end: defaultMorningClosedToggle.checked ? "" : defaultMorningEnd.value,
+                evening_start: defaultEveningClosedToggle.checked ? "" : defaultEveningStart.value,
+                evening_end: defaultEveningClosedToggle.checked ? "" : defaultEveningEnd.value,
+                updatedAt: new Date()
+            };
+
+            try {
+                await setDoc(doc(db, "settings", "hours"), payload);
+                defaultHours = payload;
+                defaultHoursSaveStatus.textContent = "Saved. The public booking page now uses these hours.";
+                defaultHoursSaveStatus.classList.add('success');
+                // Any day currently open in the per-day editor without its own
+                // override was showing the old defaults — refresh it.
+                if (selectedDateStr && !availabilityCache[selectedDateStr]) {
+                    openEditPanel(selectedDateStr);
+                }
+            } catch (err) {
+                console.error("Failed to save default hours:", err);
+                defaultHoursSaveStatus.textContent = "Something went wrong. Please try again.";
+                defaultHoursSaveStatus.classList.add('error');
+            } finally {
+                saveDefaultHoursBtn.disabled = false;
+            }
+        });
 
         function classifyDate(dateStr) {
             const entry = availabilityCache[dateStr];
@@ -696,7 +850,8 @@
         }
 
         function initCalendar() {
-            loadAllAvailability().then(() => {
+            Promise.all([loadDefaultHours(), loadAllAvailability()]).then(() => {
+                renderDefaultHoursForm();
                 renderFlatpickr();
                 renderOverridesList();
             });
@@ -736,18 +891,18 @@
 
             unavailableToggle.checked = !!entry.unavailable;
 
-            const mStart = entry.morning_start !== undefined ? entry.morning_start : DEFAULT_HOURS.morning_start;
-            const mEnd = entry.morning_end !== undefined ? entry.morning_end : DEFAULT_HOURS.morning_end;
-            const eStart = entry.evening_start !== undefined ? entry.evening_start : DEFAULT_HOURS.evening_start;
-            const eEnd = entry.evening_end !== undefined ? entry.evening_end : DEFAULT_HOURS.evening_end;
+            const mStart = entry.morning_start !== undefined ? entry.morning_start : defaultHours.morning_start;
+            const mEnd = entry.morning_end !== undefined ? entry.morning_end : defaultHours.morning_end;
+            const eStart = entry.evening_start !== undefined ? entry.evening_start : defaultHours.evening_start;
+            const eEnd = entry.evening_end !== undefined ? entry.evening_end : defaultHours.evening_end;
 
             morningClosedToggle.checked = (mStart === "" && mEnd === "");
             eveningClosedToggle.checked = (eStart === "" && eEnd === "");
 
-            morningStart.value = mStart || DEFAULT_HOURS.morning_start;
-            morningEnd.value = mEnd || DEFAULT_HOURS.morning_end;
-            eveningStart.value = eStart || DEFAULT_HOURS.evening_start;
-            eveningEnd.value = eEnd || DEFAULT_HOURS.evening_end;
+            morningStart.value = mStart || defaultHours.morning_start;
+            morningEnd.value = mEnd || defaultHours.morning_end;
+            eveningStart.value = eStart || defaultHours.evening_start;
+            eveningEnd.value = eEnd || defaultHours.evening_end;
 
             refreshFieldStates();
         }

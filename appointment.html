@@ -4,6 +4,8 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Book an Appointment | Advanced Skin Clinic</title>
+    <link rel="icon" type="image/png" href="favicon.png">
+    <link rel="apple-touch-icon" href="apple-touch-icon.png">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Quando&family=Open+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
@@ -436,14 +438,17 @@
             return `${hours}:${minutes} ${ampm}`;
         }
 
-        // --- DAY-LEVEL AVAILABILITY (set by the doctor in calendar.html) ---
-        const DEFAULT_HOURS = {
+        // --- DAY-LEVEL AVAILABILITY (set by the doctor/reception in calendar.html) ---
+        // Fallback used only if the clinic-wide "settings/hours" doc has
+        // never been saved, or fails to load.
+        const FALLBACK_HOURS = {
             morning_start: "10:00",
             morning_end: "13:30",
             evening_start: "16:30",
             evening_end: "19:30"
         };
 
+        let defaultHours = { ...FALLBACK_HOURS }; // clinic-wide default, editable in calendar.html
         let availabilityMap = {}; // dateStr -> { unavailable, morning_start, morning_end, evening_start, evening_end }
 
         function toLocalDateStr(date) {
@@ -455,12 +460,20 @@
 
         async function loadAvailability() {
             try {
-                const snap = await getDocs(collection(db, "availability"));
+                const [defaultSnap, overridesSnap] = await Promise.all([
+                    getDoc(doc(db, "settings", "hours")),
+                    getDocs(collection(db, "availability"))
+                ]);
+
+                if (defaultSnap.exists()) {
+                    defaultHours = { ...FALLBACK_HOURS, ...defaultSnap.data() };
+                }
+
                 const map = {};
-                snap.forEach(docSnap => { map[docSnap.id] = docSnap.data(); });
+                overridesSnap.forEach(docSnap => { map[docSnap.id] = docSnap.data(); });
                 availabilityMap = map;
             } catch (error) {
-                console.error("Could not load availability overrides, falling back to default hours:", error);
+                console.error("Could not load availability/default hours, falling back to built-in defaults:", error);
                 availabilityMap = {};
             }
         }
@@ -520,10 +533,10 @@
             }
 
             const entry = dateStr ? availabilityMap[dateStr] : null;
-            const morningStart = entry && entry.morning_start !== undefined ? entry.morning_start : DEFAULT_HOURS.morning_start;
-            const morningEnd = entry && entry.morning_end !== undefined ? entry.morning_end : DEFAULT_HOURS.morning_end;
-            const eveningStart = entry && entry.evening_start !== undefined ? entry.evening_start : DEFAULT_HOURS.evening_start;
-            const eveningEnd = entry && entry.evening_end !== undefined ? entry.evening_end : DEFAULT_HOURS.evening_end;
+            const morningStart = entry && entry.morning_start !== undefined ? entry.morning_start : defaultHours.morning_start;
+            const morningEnd = entry && entry.morning_end !== undefined ? entry.morning_end : defaultHours.morning_end;
+            const eveningStart = entry && entry.evening_start !== undefined ? entry.evening_start : defaultHours.evening_start;
+            const eveningEnd = entry && entry.evening_end !== undefined ? entry.evening_end : defaultHours.evening_end;
 
             // Morning shift
             addSlotsInRange(morningStart, morningEnd);
